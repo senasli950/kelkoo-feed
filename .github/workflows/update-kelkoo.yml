@@ -1,0 +1,56 @@
+name: Update Kelkoo France Feed
+
+on:
+  schedule:
+    - cron: "0 */3 * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  update-feed:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Kelkoo feed repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          pip install requests
+
+      - name: Generate Kelkoo France feed
+        env:
+          SHOPIFY_ACCESS_TOKEN: ${{ secrets.SHOPIFY_ACCESS_TOKEN }}
+        run: |
+          python generate_feed.py
+
+      - name: Checkout main feed repository
+        uses: actions/checkout@v4
+        with:
+          repository: senasli950/trovaprezzy-feed
+          token: ${{ secrets.OLD_REPO_TOKEN }}
+          path: old-feed
+
+      - name: Copy Kelkoo feed to main feed repository
+        run: |
+          cp kelkoo.xml old-feed/kelkoo.xml
+
+      - name: Commit and push Kelkoo feed
+        working-directory: old-feed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          git add kelkoo.xml
+
+          git diff --cached --quiet || git commit -m "Update Kelkoo France feed"
+
+          git push
