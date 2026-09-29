@@ -23,7 +23,12 @@ FRENCH_PATH = "/fr/products/"
 
 TIMEOUT = 60
 
-
+HIDDEN_SKUS = {
+    "GAME-MC",
+    "GAME-CP2077",
+    "GAME-TW3",
+    "GAME-CD"
+}
 # ============================================================
 # SHOPIFY GRAPHQL
 # ============================================================
@@ -452,6 +457,14 @@ def build_product(product):
         return None
 
     sku = (variant.get("sku") or "").strip()
+
+    # Skip manually hidden products
+    if sku in HIDDEN_SKUS:
+        print(
+            f"SKIP: manually hidden -> "
+            f"{product.get('title')} | SKU={sku}"
+        )
+        return None
 
     # Kelkoo id must be unique and max 50 chars.
     product_id = sku
