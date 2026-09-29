@@ -444,6 +444,12 @@ def build_product(product):
         return None
 
     variant = variants[0]
+        # Skip out-of-stock products completely
+    if not variant.get("availableForSale"):
+        print(
+            f"SKIP: out of stock -> {product.get('title')}"
+        )
+        return None
 
     sku = (variant.get("sku") or "").strip()
 
