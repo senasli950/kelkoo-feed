@@ -788,13 +788,17 @@ def main():
                 print(f"OK {locale.upper()}: {result['title']} | {result['price']} EUR")
 
         if not feed_products:
+            if locale == "de":
+                print("No German-translated products yet; publishing an empty German feed.")
+                write_feed(filename, [])
+                continue
             raise RuntimeError(
-                f"No products for {locale.upper()} feed; refusing to overwrite it "
-                "while enabled. Check translations, stock and Shopify data."
+                "No products for FR feed; refusing to overwrite it. "
+                "Check Shopify data, stock and hidden SKUs."
             )
         write_feed(filename, feed_products)
 
 
 if __name__ == "__main__":
     main()
-        
+    
