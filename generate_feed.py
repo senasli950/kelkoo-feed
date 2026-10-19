@@ -17,9 +17,14 @@ SHOPIFY_ACCESS_TOKEN = os.environ["SHOPIFY_ACCESS_TOKEN"]
 API_VERSION = "2026-01"
 
 OUTPUT_FILE = "kelkoo.xml"
+GERMAN_OUTPUT_FILE = "kelkoo-de.xml"
+
+KELKOO_FR_ENABLED = True
+KELKOO_DE_ENABLED = True
 
 SHOP_DOMAIN = "https://saivera.net"
 FRENCH_PATH = "/fr/products/"
+GERMAN_PATH = "/de/products/"
 
 TIMEOUT = 60
 
@@ -61,6 +66,11 @@ query GetProducts($cursor: String) {
       }
 
       frenchTranslations: translations(locale: "fr") {
+        key
+        value
+      }
+
+      germanTranslations: translations(locale: "de") {
         key
         value
       }
@@ -435,10 +445,39 @@ def get_french_data(product):
 
 
 # ============================================================
+# GERMAN DATA - STRICTLY FROM SHOPIFY TRANSLATIONS
+# ============================================================
+
+def get_german_data(product):
+    translations = translation_map(product.get("germanTranslations", []))
+    title = clean_html(translations.get("title", ""))
+    description = clean_html(
+        translations.get("body_html") or translations.get("description") or ""
+    )
+    if not title or not description:
+        return None, None
+    return title, description
+
+
+GERMAN_CATEGORIES = {
+    "Jeux vidéo > Abonnements gaming": "Videospiele > Gaming-Abonnements",
+    "Logiciels > Sécurité > Antivirus": "Software > Sicherheit > Antivirus",
+    "Logiciels > Sécurité > VPN": "Software > Sicherheit > VPN",
+    "Logiciels > Systèmes d'exploitation > Windows": "Software > Betriebssysteme > Windows",
+    "Logiciels > Bureautique > Microsoft Office": "Software > Bürosoftware > Microsoft Office",
+    "Logiciels > Création graphique > Adobe": "Software > Grafikdesign > Adobe",
+    "Logiciels > CAO et conception": "Software > CAD und Design",
+    "Jeux vidéo > Jeux vidéo numériques": "Videospiele > Digitale Spiele",
+    "Logiciels > Utilitaires": "Software > Dienstprogramme",
+    "Logiciels > Logiciels numériques": "Software > Digitale Software",
+}
+
+
+# ============================================================
 # BUILD PRODUCT
 # ============================================================
 
-def build_product(product):
+def build_product(product, locale="fr"):
 
     variants = product.get("variants", {}).get("nodes", [])
 
@@ -474,9 +513,13 @@ def build_product(product):
 
     product_id = product_id[:50]
 
-    french_title, french_description = get_french_data(
-        product
-    )
+    if locale == "de":
+        french_title, french_description = get_german_data(product)
+        if not french_title or not french_description:
+            print(f"SKIP DE: missing German translation -> {product.get('title')}")
+            return None
+    else:
+        french_title, french_description = get_french_data(product)
 
     french_title = truncate(
         french_title,
@@ -539,13 +582,13 @@ def build_product(product):
 
     landing_page_url = (
         f"{SHOP_DOMAIN}"
-        f"{FRENCH_PATH}"
+        f"{GERMAN_PATH if locale == 'de' else FRENCH_PATH}"
         f"{handle}"
     )
 
     tracking_params = urlencode(
         {
-            "utm_source": "kelkoofr",
+            "utm_source": "kelkoode" if locale == "de" else "kelkoofr",
             "utm_medium": "cpc",
             "utm_campaign": "kelkooclick",
             "utm_source_platform": "KelkooGroup",
@@ -562,6 +605,11 @@ def build_product(product):
         product,
         brand,
     )
+
+    if locale == "de":
+        merchant_category = GERMAN_CATEGORIES.get(
+            merchant_category, "Software > Digitale Software"
+        )
 
     # Kelkoo availability:
     # 1 = In stock
@@ -700,65 +748,53 @@ def build_xml(products):
 # MAIN
 # ============================================================
 
-def main():
+def write_feed(filename, products):
+    xml_data = build_xml(products)
+    with open(filename, "wb") as f:
+        f.write(xml_data)
+    print(f"Feed created: {filename} | Products: {len(products)}")
+    print(f"URL after deployment: https://feed.saivera.net/{filename}")
 
+
+def main():
     print("=" * 80)
-    print("SAIVERA - KELKOO FRANCE FEED")
+    print("SAIVERA - KELKOO FRANCE & GERMANY FEEDS")
     print("=" * 80)
+
+    # When disabled, publish an empty feed to remove products from that feed.
+    # Both feeds are always written, so GitHub can publish them independently.
+    if not KELKOO_FR_ENABLED and not KELKOO_DE_ENABLED:
+        write_feed(OUTPUT_FILE, [])
+        write_feed(GERMAN_OUTPUT_FILE, [])
+        return
 
     products = get_all_products()
 
-    print("=" * 80)
-    print("Building French Kelkoo products...")
-    print("=" * 80)
+    for locale, filename, enabled in [
+        ("fr", OUTPUT_FILE, KELKOO_FR_ENABLED),
+        ("de", GERMAN_OUTPUT_FILE, KELKOO_DE_ENABLED),
+    ]:
+        if not enabled:
+            print(f"{locale.upper()} feed disabled: publishing empty feed")
+            write_feed(filename, [])
+            continue
 
-    feed_products = []
+        feed_products = []
+        print(f"Building {locale.upper()} feed...")
+        for product in products:
+            result = build_product(product, locale=locale)
+            if result:
+                feed_products.append(result)
+                print(f"OK {locale.upper()}: {result['title']} | {result['price']} EUR")
 
-    for product in products:
-
-        result = build_product(product)
-
-        if result:
-            feed_products.append(result)
-
-            print(
-                f"OK: {result['title']} "
-                f"| {result['price']} EUR "
-                f"| {result['brand']} "
-                f"| stock={result['availability']}"
+        if not feed_products:
+            raise RuntimeError(
+                f"No products for {locale.upper()} feed; refusing to overwrite it "
+                "while enabled. Check translations, stock and Shopify data."
             )
-
-    print("=" * 80)
-    print(
-        f"Products included in feed: "
-        f"{len(feed_products)}"
-    )
-    print("=" * 80)
-
-    if not feed_products:
-        raise RuntimeError(
-            "No products were generated. "
-            "The feed was NOT created."
-        )
-
-    xml_data = build_xml(feed_products)
-
-    with open(
-        OUTPUT_FILE,
-        "wb",
-    ) as f:
-        f.write(xml_data)
-
-    print(
-        f"Feed created successfully: "
-        f"{OUTPUT_FILE}"
-    )
-
-    print(
-        f"Feed URL after GitHub Pages deployment: "
-        f"https://feed.saivera.net/{OUTPUT_FILE}"
-    )
+        write_feed(filename, feed_products)
 
 
 if __name__ == "__main__":
     main()
+        
