@@ -45,6 +45,7 @@ jobs:
       - name: Copy Kelkoo feed to main feed repository
         run: |
           cp kelkoo.xml old-feed/kelkoo.xml
+          cp kelkoo-de.xml old-feed/kelkoo-de.xml
 
       - name: Commit and push Kelkoo feed
         working-directory: old-feed
@@ -52,7 +53,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-          git add kelkoo.xml
+          git add kelkoo.xml kelkoo-de.xml
 
           if git diff --cached --quiet; then
             echo "Kelkoo feed unchanged."
