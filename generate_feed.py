@@ -20,7 +20,7 @@ OUTPUT_FILE = "kelkoo.xml"
 GERMAN_OUTPUT_FILE = "kelkoo-de.xml"
 
 KELKOO_FR_ENABLED = True
-KELKOO_DE_ENABLED = True
+KELKOO_DE_ENABLED = False
 
 SHOP_DOMAIN = "https://saivera.net"
 FRENCH_PATH = "/fr/products/"
